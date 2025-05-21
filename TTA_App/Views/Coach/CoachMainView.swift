@@ -41,6 +41,13 @@ struct CoachMainView: View {
                 }
                 .tag(2)
             
+            // Reports Tab
+            CoachReportsView()
+                .tabItem {
+                    Label("Reports", systemImage: "chart.bar")
+                }
+                .tag(3)
+            
             // Profile Tab
             CoachesProfileView()
                 .tabItem {
@@ -76,7 +83,7 @@ struct CoachMainView: View {
         case 2:
             return "My Students"
         case 3:
-            return "Earnings"
+            return "Reports"
         case 4:
             return "Profile"
         default:
