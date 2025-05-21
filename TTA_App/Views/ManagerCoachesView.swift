@@ -15,6 +15,7 @@ struct ManagerCoachesView: View {
         let firstName: String
         let lastName: String
         let email: String
+        let phoneNumber: String
         let profileImageURL: String?
         let totalEarnings: Int
         let totalHours: Double
@@ -175,6 +176,7 @@ struct ManagerCoachesView: View {
                         }
                         
                         let profileImageURL = data["profileImageURL"] as? String
+                        let phoneNumber = data["phoneNumber"] as? String ?? "Not provided"
                         
                         // Calculate total earnings
                         group.enter()
@@ -216,6 +218,7 @@ struct ManagerCoachesView: View {
                                                 firstName: firstName,
                                                 lastName: lastName,
                                                 email: email,
+                                                phoneNumber: phoneNumber,
                                                 profileImageURL: profileImageURL,
                                                 totalEarnings: totalEarnings,
                                                 totalHours: totalHours,
@@ -259,6 +262,10 @@ struct CoachRow: View {
                 
                 Text(coach.email)
                     .font(.subheadline)
+                    .foregroundColor(.gray)
+                
+                Text(coach.phoneNumber)
+                    .font(.caption)
                     .foregroundColor(.gray)
             }
             
@@ -316,6 +323,11 @@ struct CoachDetailView: View {
                         Text(coach.email)
                             .font(.subheadline)
                             .foregroundColor(.gray)
+                            
+                        Text(coach.phoneNumber)
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                            .padding(.top, 4)
                     }
                     .padding()
                     
@@ -482,6 +494,7 @@ struct AddCoachView: View {
     @State private var firstName = ""
     @State private var lastName = ""
     @State private var email = ""
+    @State private var phoneNumber = ""
     @State private var password = ""
     @State private var showAlert = false
     @State private var alertMessage = ""
@@ -498,6 +511,8 @@ struct AddCoachView: View {
                     TextField("Email", text: $email)
                         .keyboardType(.emailAddress)
                         .autocapitalization(.none)
+                    TextField("Phone Number", text: $phoneNumber)
+                        .keyboardType(.phonePad)
                     SecureField("Password", text: $password)
                 }
                 
@@ -509,7 +524,7 @@ struct AddCoachView: View {
                             Text("Create Coach Account")
                         }
                     }
-                    .disabled(firstName.isEmpty || lastName.isEmpty || email.isEmpty || password.isEmpty || isLoading)
+                    .disabled(firstName.isEmpty || lastName.isEmpty || email.isEmpty || phoneNumber.isEmpty || password.isEmpty || isLoading)
                 }
             }
             .navigationTitle("Add Coach")
@@ -551,6 +566,7 @@ struct AddCoachView: View {
                 "firstName": firstName,
                 "lastName": lastName,
                 "email": email,
+                "phoneNumber": phoneNumber,
                 "role": "Coach",
                 "createdAt": FieldValue.serverTimestamp()
             ]) { error in

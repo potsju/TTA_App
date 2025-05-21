@@ -8,6 +8,7 @@ struct ManagerStudentsView: View {
     @State private var searchText = ""
     @State private var selectedStudent: Student?
     @State private var showingStudentDetails = false
+    @State private var showingAddStudent = false
     @State private var sortOption = SortOption.nameAsc
     @State private var selectedFilter = FilterOption.all
     
@@ -16,6 +17,7 @@ struct ManagerStudentsView: View {
         let firstName: String
         let lastName: String
         let email: String
+        let phoneNumber: String
         let joinDate: Date
         let profileImageURL: String?
         let activeClasses: Int
@@ -93,72 +95,105 @@ struct ManagerStudentsView: View {
     
     var body: some View {
         NavigationView {
-            VStack {
-                // Search and filter bar
-                HStack {
+            ZStack {
+                VStack {
+                    // Search and filter bar
                     HStack {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundColor(.gray)
+                        HStack {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundColor(.gray)
+                            
+                            TextField("Search students", text: $searchText)
+                                .disableAutocorrection(true)
+                        }
+                        .padding(8)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(10)
                         
-                        TextField("Search students", text: $searchText)
-                            .disableAutocorrection(true)
+                        Menu {
+                            Picker("Sort By", selection: $sortOption) {
+                                ForEach(SortOption.allCases) { option in
+                                    Text(option.rawValue).tag(option)
+                                }
+                            }
+                            .pickerStyle(InlinePickerStyle())
+                            
+                            Divider()
+                            
+                            Picker("Filter", selection: $selectedFilter) {
+                                ForEach(FilterOption.allCases) { option in
+                                    Text(option.rawValue).tag(option)
+                                }
+                            }
+                            .pickerStyle(InlinePickerStyle())
+                        } label: {
+                            Image(systemName: "line.3.horizontal.decrease.circle")
+                                .font(.system(size: 22))
+                                .foregroundColor(.blue)
+                        }
                     }
-                    .padding(8)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
+                    .padding(.horizontal)
                     
-                    Menu {
-                        Picker("Sort By", selection: $sortOption) {
-                            ForEach(SortOption.allCases) { option in
-                                Text(option.rawValue).tag(option)
+                    if isLoading {
+                        Spacer()
+                        ProgressView("Loading students...")
+                        Spacer()
+                    } else if students.isEmpty {
+                        Spacer()
+                        VStack(spacing: 15) {
+                            Image(systemName: "person.2.slash")
+                                .font(.system(size: 60))
+                                .foregroundColor(.gray)
+                            Text("No students found")
+                                .font(.headline)
+                                .padding(.top)
+                                
+                            Button(action: {
+                                showingAddStudent = true
+                            }) {
+                                Text("Add a Student")
+                                    .padding()
+                                    .background(TailwindColors.violet500)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(8)
                             }
                         }
-                        .pickerStyle(InlinePickerStyle())
-                        
-                        Divider()
-                        
-                        Picker("Filter", selection: $selectedFilter) {
-                            ForEach(FilterOption.allCases) { option in
-                                Text(option.rawValue).tag(option)
+                        Spacer()
+                    } else {
+                        // Student list
+                        List {
+                            ForEach(filteredStudents) { student in
+                                StudentRow(student: student)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        selectedStudent = student
+                                        showingStudentDetails = true
+                                    }
                             }
                         }
-                        .pickerStyle(InlinePickerStyle())
-                    } label: {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                            .font(.system(size: 22))
-                            .foregroundColor(.blue)
+                        .listStyle(PlainListStyle())
                     }
                 }
-                .padding(.horizontal)
                 
-                if isLoading {
+                // FAB for adding a student
+                VStack {
                     Spacer()
-                    ProgressView("Loading students...")
-                    Spacer()
-                } else if students.isEmpty {
-                    Spacer()
-                    VStack {
-                        Image(systemName: "person.2.slash")
-                            .font(.system(size: 60))
-                            .foregroundColor(.gray)
-                        Text("No students found")
-                            .font(.headline)
-                            .padding(.top)
-                    }
-                    Spacer()
-                } else {
-                    // Student list
-                    List {
-                        ForEach(filteredStudents) { student in
-                            StudentRow(student: student)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    selectedStudent = student
-                                    showingStudentDetails = true
-                                }
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            showingAddStudent = true
+                        }) {
+                            Image(systemName: "plus")
+                                .font(.title2)
+                                .foregroundColor(.white)
+                                .frame(width: 60, height: 60)
+                                .background(TailwindColors.violet500)
+                                .clipShape(Circle())
+                                .shadow(radius: 4)
                         }
+                        .padding(.trailing, 20)
+                        .padding(.bottom, 20)
                     }
-                    .listStyle(PlainListStyle())
                 }
             }
             .navigationTitle("Students")
@@ -174,6 +209,11 @@ struct ManagerStudentsView: View {
                 if let student = selectedStudent {
                     StudentDetailView2(student: student)
                 }
+            }
+            .sheet(isPresented: $showingAddStudent) {
+                AddStudentView(onStudentAdded: {
+                    loadStudents()
+                })
             }
         }
     }
@@ -204,6 +244,7 @@ struct ManagerStudentsView: View {
                     let firstName = data["firstName"] as? String ?? ""
                     let lastName = data["lastName"] as? String ?? ""
                     let email = data["email"] as? String ?? ""
+                    let phoneNumber = data["phoneNumber"] as? String ?? "Not provided"
                     let profileImageURL = data["profileImageURL"] as? String
                     let joinDate = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
                     
@@ -254,6 +295,7 @@ struct ManagerStudentsView: View {
                                                 firstName: firstName,
                                                 lastName: lastName,
                                                 email: email,
+                                                phoneNumber: phoneNumber,
                                                 joinDate: joinDate,
                                                 profileImageURL: profileImageURL,
                                                 activeClasses: activeClasses,
@@ -298,6 +340,10 @@ struct StudentRow: View {
                 
                 Text(student.email)
                     .font(.subheadline)
+                    .foregroundColor(.gray)
+                
+                Text(student.phoneNumber)
+                    .font(.caption)
                     .foregroundColor(.gray)
             }
             
@@ -363,6 +409,11 @@ struct StudentDetailView2: View {
                         Text(student.email)
                             .font(.subheadline)
                             .foregroundColor(.gray)
+                        
+                        Text(student.phoneNumber)
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                            .padding(.top, 2)
                         
                         Text("Member since \(student.joinDate.formatted(date: .abbreviated, time: .omitted))")
                             .font(.caption)
@@ -641,5 +692,104 @@ struct InfoCard<Content: View>: View {
 struct ManagerStudentsView_Previews: PreviewProvider {
     static var previews: some View {
         ManagerStudentsView()
+    }
+}
+
+struct AddStudentView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var firstName = ""
+    @State private var lastName = ""
+    @State private var email = ""
+    @State private var phoneNumber = ""
+    @State private var password = ""
+    @State private var showAlert = false
+    @State private var alertMessage = ""
+    @State private var isLoading = false
+    
+    var onStudentAdded: () -> Void
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("Student Information")) {
+                    TextField("First Name", text: $firstName)
+                    TextField("Last Name", text: $lastName)
+                    TextField("Email", text: $email)
+                        .keyboardType(.emailAddress)
+                        .autocapitalization(.none)
+                    TextField("Phone Number", text: $phoneNumber)
+                        .keyboardType(.phonePad)
+                    SecureField("Password", text: $password)
+                }
+                
+                Section {
+                    Button(action: createStudent) {
+                        if isLoading {
+                            ProgressView()
+                        } else {
+                            Text("Create Student Account")
+                        }
+                    }
+                    .disabled(firstName.isEmpty || lastName.isEmpty || email.isEmpty || phoneNumber.isEmpty || password.isEmpty || isLoading)
+                }
+            }
+            .navigationTitle("Add Student")
+            .navigationBarItems(trailing: Button("Cancel") {
+                dismiss()
+            })
+            .alert(isPresented: $showAlert) {
+                Alert(title: Text("Error"), message: Text(alertMessage), dismissButton: .default(Text("OK")))
+            }
+        }
+    }
+    
+    private func createStudent() {
+        isLoading = true
+        
+        // Create user account
+        Auth.auth().createUser(withEmail: email, password: password) { result, error in
+            if let error = error {
+                DispatchQueue.main.async {
+                    alertMessage = error.localizedDescription
+                    showAlert = true
+                    isLoading = false
+                }
+                return
+            }
+            
+            guard let userId = result?.user.uid else {
+                DispatchQueue.main.async {
+                    alertMessage = "Error creating user account"
+                    showAlert = true
+                    isLoading = false
+                }
+                return
+            }
+            
+            // Add user profile to database
+            let db = Firestore.firestore()
+            db.collection("users").document(userId).setData([
+                "firstName": firstName,
+                "lastName": lastName,
+                "email": email,
+                "phoneNumber": phoneNumber,
+                "role": "Student",
+                "createdAt": FieldValue.serverTimestamp()
+            ]) { error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        alertMessage = "Error saving user data: \(error.localizedDescription)"
+                        showAlert = true
+                        isLoading = false
+                        return
+                    }
+                    
+                    // Success - dismiss and refresh
+                    isLoading = false
+                    onStudentAdded()
+                    dismiss()
+                }
+            }
+        }
     }
 } 
