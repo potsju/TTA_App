@@ -35,14 +35,14 @@ struct CoachMainView: View {
                 .tag(1)
             
             // Students Tab
-            StudentsView()
+            CoachStudentsView()
                 .tabItem {
                     Label("Students", systemImage: "person.2")
                 }
                 .tag(2)
             
             // Profile Tab
-            ProfileView()
+            CoachesProfileView()
                 .tabItem {
                     Label("Profile", systemImage: "person.crop.circle")
                 }
@@ -445,5 +445,6 @@ struct StudentProfileCard: View {
 struct CoachMainView_Previews: PreviewProvider {
     static var previews: some View {
         CoachMainView()
+            .environmentObject(MockAuthViewModel(role: .coach))
     }
 } 

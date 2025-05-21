@@ -41,13 +41,7 @@ struct ManagerMainView: View {
                     Label("Finances", systemImage: "dollarsign.circle.fill")
                 }
                 .tag(3)
-            
-            // Profile Tab
-            ProfileView()
-                .tabItem {
-                    Label("Profile", systemImage: "person.crop.circle")
-                }
-                .tag(4)
+           
         }
         .accentColor(TailwindColors.violet400)
         .onChange(of: selectedTab) { newTab in
@@ -85,4 +79,9 @@ struct ManagerMainView: View {
             }
         }
     }
+} 
+
+#Preview {
+    ManagerMainView()
+        .environmentObject(MockAuthViewModel(role: .manager))
 } 

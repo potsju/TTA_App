@@ -45,12 +45,20 @@ struct TTA_AppApp: App {
                             .onAppear {
                                 print("DEBUG: Showing ManagerMainView - Role is manager")
                             }
-                    case .student, .unknown:
-                        MainTabView()
+                    case .student:
+                        StudentMainView()
                             .environmentObject(authViewModel)
                             .transition(.opacity)
                             .onAppear {
-                                print("DEBUG: Showing MainTabView - Role is student or unknown")
+                                print("DEBUG: Showing StudentMainView - Role is student")
+                            }
+                    case .unknown:
+                        // Default to student view if role is unknown
+                        StudentMainView()
+                            .environmentObject(authViewModel)
+                            .transition(.opacity)
+                            .onAppear {
+                                print("DEBUG: Role unknown, defaulting to StudentMainView")
                             }
                     }
                 }

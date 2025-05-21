@@ -97,10 +97,7 @@ struct SignUpView: View {
         .alert(isPresented: $showAlert) {
             Alert(title: Text("Message"), message: Text(alertMessage), dismissButton: .default(Text("OK")))
         }
-        .navigationDestination(isPresented: $showMainTab) {
-            MainTabView()
-                .navigationBarBackButtonHidden(true)
-        }
+    
         .navigationDestination(isPresented: $showCoachView) {
             CoachMainView()
                 .navigationBarBackButtonHidden(true)

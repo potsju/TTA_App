@@ -131,3 +131,8 @@ struct LoginView: View {
         }
     }
 }
+
+#Preview {
+    LoginView()
+        .environmentObject(MockAuthViewModel(role: .unknown))
+}

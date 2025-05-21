@@ -6,6 +6,7 @@ import AVFoundation
 import CodeScanner
 import CoreImage
 import CoreImage.CIFilterBuiltins
+import Foundation
 
 struct EnhancedStudentDetailView: View {
     let student: Student
@@ -22,6 +23,11 @@ struct EnhancedStudentDetailView: View {
     @State private var isRecording = false
     @State private var isLoading = true
     @State private var errorMessage: String?
+    @State private var recordingDuration: TimeInterval = 0
+    @State private var recordingTimer: Timer?
+    @State private var isPlaying = false
+    @State private var selectedMemoURL: URL?
+    @State private var audioPlayer: AVAudioPlayer?
     
     var body: some View {
         NavigationView {
@@ -305,23 +311,61 @@ struct EnhancedStudentDetailView: View {
                 )
             }
             
-            // Load voice memos
+            // Load voice memos from direct voice_memos collection
             let memosSnapshot = try await db.collection("voice_memos")
                 .whereField("studentId", isEqualTo: student.id)
                 .getDocuments()
             
-            voiceMemos = memosSnapshot.documents.compactMap { document -> VoiceMemo? in
-                let data = document.data()
-                return VoiceMemo(
-                    id: document.documentID,
-                    url: data["url"] as? String ?? "",
-                    timestamp: (data["timestamp"] as? Timestamp)?.dateValue() ?? Date(),
-                    coachId: data["coachId"] as? String ?? "",
-                    classId: data["classId"] as? String
-                )
+            var allMemos: [VoiceMemo] = []
+            
+            // Process direct voice memos
+            for document in memosSnapshot.documents {
+                if let memo = VoiceMemo.fromFirestore(document: document) {
+                    allMemos.append(memo)
+                }
             }
             
-            isLoading = false
+            // Also load voice memos from session reports
+            let sessionReportsSnapshot = try await db.collection("sessionReports")
+                .whereField("studentId", isEqualTo: student.id)
+                .getDocuments()
+            
+            // Process memos from session reports
+            for document in sessionReportsSnapshot.documents {
+                let data = document.data()
+                if let memoData = data["voiceMemos"] as? [[String: Any]] {
+                    for memo in memoData {
+                        if let id = memo["id"] as? String,
+                           let url = memo["url"] as? String,
+                           let duration = memo["duration"] as? TimeInterval,
+                           let createdAt = (memo["createdAt"] as? Timestamp)?.dateValue(),
+                           let createdBy = memo["createdBy"] as? String {
+                            
+                            let coachId = data["coachId"] as? String ?? ""
+                            
+                            allMemos.append(VoiceMemo(
+                                id: id,
+                                url: url,
+                                duration: duration,
+                                timestamp: createdAt,
+                                coachId: coachId,
+                                studentId: student.id,
+                                classId: nil,
+                                sessionReportId: document.documentID,
+                                createdBy: createdBy
+                            ))
+                        }
+                    }
+                }
+            }
+            
+            // Sort all memos by timestamp (newest first)
+            allMemos.sort { $0.timestamp > $1.timestamp }
+            
+            await MainActor.run {
+                voiceMemos = allMemos
+                isLoading = false
+            }
         } catch {
             errorMessage = error.localizedDescription
             isLoading = false
@@ -360,7 +404,7 @@ struct EnhancedStudentDetailView: View {
         }
     }
     
-    // Add these functions for the quick voice memo recording
+    // Update startRecording to track duration
     private func startRecording() {
         let audioSession = AVAudioSession.sharedInstance()
         do {
@@ -380,6 +424,12 @@ struct EnhancedStudentDetailView: View {
             audioRecorder = try AVAudioRecorder(url: audioFilename, settings: settings)
             audioRecorder?.record()
             isRecording = true
+            
+            // Start timing
+            recordingDuration = 0
+            recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+                self.recordingDuration += 0.1
+            }
         } catch {
             print("Error starting recording: \(error)")
         }
@@ -387,6 +437,8 @@ struct EnhancedStudentDetailView: View {
     
     private func stopRecording() {
         audioRecorder?.stop()
+        recordingTimer?.invalidate()
+        recordingTimer = nil
         isRecording = false
     }
     
@@ -395,7 +447,7 @@ struct EnhancedStudentDetailView: View {
         
         do {
             let db = Firestore.firestore()
-            guard let coachId = Auth.auth().currentUser?.uid else { return }
+            guard let userId = Auth.auth().currentUser?.uid else { return }
             
             // Upload the audio file to Firebase Storage
             let storage = Storage.storage()
@@ -409,29 +461,67 @@ struct EnhancedStudentDetailView: View {
             _ = try await audioRef.putDataAsync(audioData, metadata: metadata)
             let downloadURL = try await audioRef.downloadURL()
             
-            let memoData: [String: Any] = [
-                "url": downloadURL.absoluteString,
-                "studentId": student.id,
-                "coachId": coachId,
-                "timestamp": Timestamp()
-            ]
-            
-            let document = try await db.collection("voice_memos").addDocument(data: memoData)
-            
+            // Create the new voice memo with the shared model
             let memo = VoiceMemo(
+                id: UUID().uuidString,
+                url: downloadURL.absoluteString,
+                duration: recordingDuration,
+                timestamp: Date(),
+                coachId: "", // Empty if recorded by student
+                studentId: student.id,
+                classId: nil,
+                sessionReportId: nil,
+                createdBy: "student"
+            )
+            
+            // Save to Firestore
+            let document = try await db.collection("voice_memos").addDocument(data: memo.toFirestoreData())
+            
+            let savedMemo = VoiceMemo(
                 id: document.documentID,
                 url: downloadURL.absoluteString,
+                duration: recordingDuration,
                 timestamp: Date(),
-                coachId: coachId,
-                classId: nil
+                coachId: "",
+                studentId: student.id,
+                classId: nil,
+                sessionReportId: nil,
+                createdBy: "student"
             )
             
             await MainActor.run {
-                voiceMemos.append(memo)
+                voiceMemos.insert(savedMemo, at: 0) // Add to beginning (newest first)
                 self.audioRecorder = nil
             }
         } catch {
             print("Error saving voice memo: \(error)")
+        }
+    }
+    
+    // Add playback functionality
+    private func playMemo(_ memo: VoiceMemo) {
+        guard let url = URL(string: memo.url) else { return }
+        
+        if isPlaying && selectedMemoURL == url {
+            // Stop current playback
+            AudioPlayerManager.shared.stop()
+            isPlaying = false
+            selectedMemoURL = nil
+            return
+        }
+        
+        // Stop any current playback
+        if isPlaying {
+            AudioPlayerManager.shared.stop()
+        }
+        
+        // Start new playback
+        selectedMemoURL = url
+        isPlaying = true
+        
+        AudioPlayerManager.shared.play(url: url) {
+            self.isPlaying = false
+            self.selectedMemoURL = nil
         }
     }
 }
@@ -581,14 +671,6 @@ struct StudentComment: Identifiable {
     let classId: String?
 }
 
-struct VoiceMemo: Identifiable {
-    let id: String
-    let url: String
-    let timestamp: Date
-    let coachId: String
-    let classId: String?
-}
-
 struct CommentCard: View {
     let comment: StudentComment
     @State private var coachName: String = "Untitled"
@@ -677,15 +759,20 @@ struct VoiceMemoCard: View {
     @State private var coachName: String = "Untitled"
     @State private var className: String = ""
     @State private var isPlaying = false
-    private let audioPlayer = AudioPlayer()
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Header with coach name and time
+            // Header with source info and time
             HStack {
-                Text("By: \(coachName)")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(TailwindColors.violet600)
+                if memo.createdBy == "coach" {
+                    Text("By: \(coachName)")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(TailwindColors.violet600)
+                } else {
+                    Text("Recorded by you")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(TailwindColors.orange500)
+                }
                 
                 Spacer()
                 
@@ -698,21 +785,32 @@ struct VoiceMemoCard: View {
             // Play button and title
             HStack {
                 Button(action: {
-                    if isPlaying {
-                        audioPlayer.stop()
-                    } else {
-                        audioPlayer.play(url: URL(string: memo.url)!)
+                    if let url = URL(string: memo.url) {
+                        if isPlaying {
+                            AudioPlayerManager.shared.stop()
+                            isPlaying = false
+                        } else {
+                            isPlaying = true
+                            AudioPlayerManager.shared.play(url: url) {
+                                isPlaying = false
+                            }
+                        }
                     }
-                    isPlaying.toggle()
                 }) {
                     Image(systemName: isPlaying ? "stop.circle.fill" : "play.circle.fill")
                         .font(.title)
                         .foregroundColor(TailwindColors.violet400)
                 }
                 
-                Text("Voice Memo")
-                    .font(.subheadline)
-                    .foregroundColor(isPlaying ? TailwindColors.violet600 : .primary)
+                VStack(alignment: .leading) {
+                    Text("Voice Memo")
+                        .font(.subheadline)
+                        .foregroundColor(isPlaying ? TailwindColors.violet600 : .primary)
+                    
+                    Text(formatDuration(memo.duration))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
             
             // Optional class reference
@@ -727,6 +825,19 @@ struct VoiceMemoCard: View {
                 }
                 .padding(.top, 4)
             }
+            
+            // Indicate if from session report
+            if memo.sessionReportId != nil {
+                HStack {
+                    Image(systemName: "doc.text")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                    Text("From session report")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+                .padding(.top, 4)
+            }
         }
         .padding()
         .background(Color(.systemBackground))
@@ -734,11 +845,19 @@ struct VoiceMemoCard: View {
         .shadow(radius: 2)
         .padding(.horizontal)
         .task {
-            await fetchCoachName()
+            if !memo.coachId.isEmpty {
+                await fetchCoachName()
+            }
             if let classId = memo.classId {
                 await fetchClassName(classId: classId)
             }
         }
+    }
+    
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        return String(format: "%d:%02d", minutes, seconds)
     }
     
     private func fetchCoachName() async {
@@ -852,6 +971,8 @@ struct AddVoiceMemoView: View {
     @State private var audioRecorder: AVAudioRecorder?
     @State private var isRecording = false
     @State private var isSubmitting = false
+    @State private var recordingDuration: TimeInterval = 0
+    @State private var recordingTimer: Timer?
     
     var body: some View {
         NavigationView {
@@ -874,7 +995,7 @@ struct AddVoiceMemoView: View {
                 .padding()
                 
                 if isRecording {
-                    Text("Recording...")
+                    Text("Recording... \(formatDuration(recordingDuration))")
                         .foregroundColor(.red)
                 }
             }
@@ -886,9 +1007,15 @@ struct AddVoiceMemoView: View {
                         await saveVoiceMemo()
                     }
                 }
-                .disabled(isRecording || isSubmitting)
+                .disabled(isRecording || isSubmitting || audioRecorder == nil)
             )
         }
+    }
+    
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        return String(format: "%d:%02d", minutes, seconds)
     }
     
     private func startRecording() {
@@ -910,6 +1037,12 @@ struct AddVoiceMemoView: View {
             audioRecorder = try AVAudioRecorder(url: audioFilename, settings: settings)
             audioRecorder?.record()
             isRecording = true
+            
+            // Start timing
+            recordingDuration = 0
+            recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+                self.recordingDuration += 0.1
+            }
         } catch {
             print("Error starting recording: \(error)")
         }
@@ -917,6 +1050,8 @@ struct AddVoiceMemoView: View {
     
     private func stopRecording() {
         audioRecorder?.stop()
+        recordingTimer?.invalidate()
+        recordingTimer = nil
         isRecording = false
     }
     
@@ -940,57 +1075,42 @@ struct AddVoiceMemoView: View {
             _ = try await audioRef.putDataAsync(audioData, metadata: metadata)
             let downloadURL = try await audioRef.downloadURL()
             
-            var memoData: [String: Any] = [
-                "url": downloadURL.absoluteString,
-                "studentId": studentId,
-                "coachId": coachId,
-                "timestamp": Timestamp()
-            ]
-            
-            if let classId = classId {
-                memoData["classId"] = classId
-            }
-            
-            let document = try await db.collection("voice_memos").addDocument(data: memoData)
-            
+            // Create memo with shared model
             let memo = VoiceMemo(
-                id: document.documentID,
+                id: UUID().uuidString,
                 url: downloadURL.absoluteString,
+                duration: recordingDuration,
                 timestamp: Date(),
                 coachId: coachId,
-                classId: classId
+                studentId: studentId,
+                classId: classId,
+                sessionReportId: nil,
+                createdBy: "coach"
+            )
+            
+            // Save to Firestore
+            let document = try await db.collection("voice_memos").addDocument(data: memo.toFirestoreData())
+            
+            let savedMemo = VoiceMemo(
+                id: document.documentID,
+                url: downloadURL.absoluteString,
+                duration: recordingDuration,
+                timestamp: Date(),
+                coachId: coachId,
+                studentId: studentId,
+                classId: classId,
+                sessionReportId: nil,
+                createdBy: "coach"
             )
             
             await MainActor.run {
-                onVoiceMemoAdded(memo)
+                onVoiceMemoAdded(savedMemo)
                 dismiss()
             }
         } catch {
             print("Error saving voice memo: \(error)")
         }
         isSubmitting = false
-    }
-}
-
-class AudioPlayer: NSObject, AVAudioPlayerDelegate {
-    private var audioPlayer: AVAudioPlayer?
-    
-    func play(url: URL) {
-        do {
-            audioPlayer = try AVAudioPlayer(contentsOf: url)
-            audioPlayer?.delegate = self
-            audioPlayer?.play()
-        } catch {
-            print("Error playing audio: \(error)")
-        }
-    }
-    
-    func stop() {
-        audioPlayer?.stop()
-    }
-    
-    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        // Handle audio playback completion if needed
     }
 }
 

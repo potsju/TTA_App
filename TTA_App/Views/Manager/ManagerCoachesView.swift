@@ -10,6 +10,14 @@ struct ManagerCoachesView: View {
     @State private var showingCoachDetails = false
     @State private var showingAddCoach = false
     
+    // Preview-only initializer
+    init(previewData: [Coach]? = nil, isLoading: Bool = true) {
+        if let previewData = previewData {
+            _coaches = State(initialValue: previewData)
+            _isLoading = State(initialValue: isLoading)
+        }
+    }
+    
     struct Coach: Identifiable {
         let id: String
         let firstName: String
@@ -602,8 +610,19 @@ struct AddCoachView: View {
     }
 }
 
+struct AddCoachView_Previews: PreviewProvider {
+    static var previews: some View {
+        AddCoachView(onCoachAdded: {})
+            .environmentObject(MockAuthViewModel(role: .manager))
+    }
+}
+
 struct ManagerCoachesView_Previews: PreviewProvider {
     static var previews: some View {
-        ManagerCoachesView()
+        ManagerCoachesView(
+            previewData: MockData.coaches,
+            isLoading: false
+        )
+        .environmentObject(MockAuthViewModel(role: .manager))
     }
 } 

@@ -64,22 +64,9 @@
 		A3763E162D90DA6C00EA97B3 /* TTA_AppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TTA_AppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		A3E543652DA61DF600FD45C2 /* Exceptions for "TTA_App" folder in "TTA_App" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Views/Untitled.swift,
-			);
-			target = A3763DFB2D90DA6A00EA97B3 /* TTA_App */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A3763DFE2D90DA6A00EA97B3 /* TTA_App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				A3E543652DA61DF600FD45C2 /* Exceptions for "TTA_App" folder in "TTA_App" target */,
-			);
 			path = TTA_App;
 			sourceTree = "<group>";
 		};

@@ -12,6 +12,14 @@ struct ManagerStudentsView: View {
     @State private var sortOption = SortOption.nameAsc
     @State private var selectedFilter = FilterOption.all
     
+    // Preview-only initializer
+    init(previewData: [Student]? = nil, isLoading: Bool = true) {
+        if let previewData = previewData {
+            _students = State(initialValue: previewData)
+            _isLoading = State(initialValue: isLoading)
+        }
+    }
+    
     struct Student: Identifiable {
         let id: String
         let firstName: String
@@ -691,7 +699,11 @@ struct InfoCard<Content: View>: View {
 
 struct ManagerStudentsView_Previews: PreviewProvider {
     static var previews: some View {
-        ManagerStudentsView()
+        ManagerStudentsView(
+            previewData: MockData.students,
+            isLoading: false
+        )
+        .environmentObject(MockAuthViewModel(role: .manager))
     }
 }
 
@@ -791,5 +803,12 @@ struct AddStudentView: View {
                 }
             }
         }
+    }
+}
+
+struct AddStudentView_Previews: PreviewProvider {
+    static var previews: some View {
+        AddStudentView(onStudentAdded: {})
+            .environmentObject(MockAuthViewModel(role: .manager))
     }
 } 
