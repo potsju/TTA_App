@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isCoach() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "Coach";
+    }
+    
+    // Allow users to read and write their own profile
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      // Allow users to create their own account with any role
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      // Allow users to update their own data, but not change their role after creation
+      allow update: if isAuthenticated() && request.auth.uid == userId && 
+                    (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']));
+    }
+    
+    // Allow coaches to create classes and everyone to read them
+    match /classes/{classId} {
+      allow read: if isAuthenticated();
+      // Only allow coaches to create classes
+      allow create: if isAuthenticated() && isCoach();
+      // Allow update and delete by coaches OR the creator of the class
+      allow update, delete: if isAuthenticated() && (isCoach() || resource.data.createdBy == request.auth.uid);
+    }
+    
+    // Allow earnings collection access for coaches and relevant users
+    match /earnings/{docId} {
+      allow read, write: if isAuthenticated() && (isCoach() || resource.data.coachId == request.auth.uid);
+    }
+    
+    // Allow querying the classes collection
+    match /classes {
+      allow list: if isAuthenticated();
+    }
+  }
+} 
