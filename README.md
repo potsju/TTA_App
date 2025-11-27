@@ -1,7 +1,6 @@
 Table Tennis America (TTA)
-An iOS app built with SwiftUI and designed in Figma to help players engage with local table tennis tournaments.
 
-Table Tennis America (TTA) gives players an easy way to browse schedules, register for matches, and track rankings—all in one place. 
+An iOS app built with SwiftUI and designed in Figma to help players engage with local table tennis tournaments, giving players an easy way to browse schedules, register for matches, and track rankings—all in one place. 
 
 ### Tournament Schedules
 - View upcoming matches and event times  
