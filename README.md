@@ -1,4 +1,4 @@
-Table Tennis America (TTA)
+Sports Club App
 
 An iOS app built with SwiftUI and designed in Figma to help players engage with local table tennis tournaments, giving players an easy way to browse schedules, register for matches, and track rankings—all in one place. 
 
